@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class DataFixUtils {
-    private DataFixUtils() {
+    public DataFixUtils() {
     }
 
     // Based on: http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2

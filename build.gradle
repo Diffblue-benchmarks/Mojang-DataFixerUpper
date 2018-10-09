@@ -32,6 +32,11 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    jacoco
+    jacocoRuntime
+}
+
 dependencies {
     compile 'com.google.code.findbugs:jsr305:2.0.1'
     compile 'com.google.code.gson:gson:2.8.0'
@@ -39,6 +44,9 @@ dependencies {
     compile 'com.google.guava:guava:21.0'
     compile 'org.apache.commons:commons-lang3:3.5'
     compile 'it.unimi.dsi:fastutil:7.1.0'
+    testCompile 'junit:junit:4.12'
+    jacoco group: 'org.jacoco', name: 'org.jacoco.ant', version: '0.8.1', classifier: 'nodeps'
+    jacocoRuntime group: 'org.jacoco', name: 'org.jacoco.agent', version: '0.8.1', classifier: 'runtime'
 }
 
 task sourcesJar(type: Jar) {
@@ -87,10 +95,46 @@ publishing {
     }
 }
 
-task report {
-    doLast {
-        println "##teamcity[buildNumber '${project.version}']"
+task instrument(dependsOn: ['classes']) {
+  ext.outputDir = buildDir.path + '/classes-instrumented'
+  doLast {
+    ant.taskdef(name: 'instrument', classname: 'org.jacoco.ant.InstrumentTask', classpath: configurations.jacoco.asPath)
+    ant.instrument(destdir: outputDir) {
+      fileset(dir: sourceSets.main.output.classesDir)
     }
+  }
+}
+
+gradle.taskGraph.whenReady { graph ->
+  if (graph.hasTask(instrument)) {
+    tasks.withType(Test) {
+      doFirst {
+        systemProperty 'jacoco-agent.destfile', buildDir.path + '/jacoco/tests.exec'
+        classpath = files(instrument.outputDir) + classpath + configurations.jacocoRuntime
+      }
+    }
+  }
+}
+
+task report(dependsOn: ['instrument', 'test']) {
+  doLast {
+    ant.taskdef(name: 'report', classname: 'org.jacoco.ant.ReportTask', classpath: configurations.jacoco.asPath)
+    ant.report() {
+      executiondata {
+        ant.file(file: buildDir.path + '/jacoco/tests.exec')
+      }
+      structure(name: 'Example') {
+         classfiles {
+           fileset(dir: sourceSets.main.output.classesDir)
+         }
+         sourcefiles {
+           fileset(dir: 'src/main/java')
+         }
+      }
+      html(destdir: buildDir.path + '/reports/jacoco')
+    }
+    println "##teamcity[buildNumber '${project.version}']"
+  }
 }
 
 def publishDir = file("$buildDir/repo")
